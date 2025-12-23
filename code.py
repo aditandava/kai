@@ -299,7 +299,8 @@ def cmd_list_groups(m):
         bot.reply_to(m, "⛔ Access Denied")
         return
 
-    msg = bot.reply_to(m, "⏳ *Scanning Database (Safe Mode)...*", parse_mode="MarkdownV2")
+    # 🛠️ FIX: Removed 'MarkdownV2' here to prevent the "Character '(' reserved" crash
+    msg = bot.reply_to(m, "⏳ Scanning Database (Safe Mode)...")
     
     # 2. Check Raw DB Count
     total_docs = db.groups.count_documents({})
