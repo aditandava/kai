@@ -292,6 +292,50 @@ def get_help_text():
 
 
 # --- HANDLERS --
+@bot.message_handler(commands=['gcast'])
+def cmd_broadcast(m):
+    if m.from_user.id != MONITOR_ID: 
+        bot.reply_to(m, "⛔ Access Denied")
+        return
+    if m.reply_to_message:
+        msg_text = m.reply_to_message.text
+    
+    elif len(m.text.split()) > 1:
+        msg_text = m.text.split(maxsplit=1)[1]
+    else:
+        bot.reply_to(m, "⚠️ **Usage:**\n1. `/gcast Your Message`\n2. Reply to a message with `/gcast`", parse_mode="Markdown")
+        return
+
+    
+    status_msg = bot.reply_to(m, "⏳ *Starting Broadcast...*", parse_mode="Markdown")
+    
+    success_count = 0
+    fail_count = 0
+    
+    cursor = db.groups.find({}, {"_id": 1})
+    
+    for doc in cursor:
+        chat_id = doc['_id']
+        time.sleep(0.1) 
+        
+        try:
+            bot.send_message(chat_id, msg_text)
+            success_count += 1
+        except Exception as e:
+            fail_count += 1
+            err = str(e).lower()
+            if "forbidden" in err or "kicked" in err or "not found" in err:
+                db.groups.delete_one({"_id": chat_id})
+
+    report = (
+        f"📢 **Broadcast Complete**\n"
+        f"✅ Sent: `{success_count}`\n"
+        f"❌ Failed: `{fail_count}`\n"
+        f"(Dead groups were automatically removed)"
+    )
+    
+    bot.edit_message_text(report, m.chat.id, status_msg.message_id, parse_mode="Markdown")
+
 @bot.message_handler(commands=['groups'])
 def cmd_list_groups(m):
     # 1. Security
