@@ -358,7 +358,7 @@ def get_help_text():
         "👮 *Moderation:*\n"
         "`/ban`   `/unban`\n"
         "`/mute`  `/unmute`\n"
-        "`/kick`  `/warn`\n\n"
+        "`/kick` \n\n"
         "🔧 *Tools & Config:*\n"
         "🗑 `/purge [N]`   — _Delete msgs_\n"
         "📌 `/pin`         — _Pin reply_\n"
@@ -372,85 +372,121 @@ def get_help_text():
     )
 
 def get_ai_decision(user, text, history, is_reply, is_user_admin, is_user_owner):
+    # 1. Sanitize Input
     text = sanitize_input(text)
+    
+    # 2. Determine Role
     if is_user_owner:
         role_desc = "REAL OWNER (Yuhan @lotus_dark)"
-    elif "yuhan" in user.lower():
-        role_desc = "FAKE YUHAN"
+    elif "yuhan" in user.lower(): 
+        role_desc = "FAKE YUHAN (Imposter)"
     elif is_user_admin:
-        role_desc = "ADMIN"
+        role_desc = "ADMIN (Boss)"
     else:
         role_desc = "GUEST"
+
+    # 3. The Solid Prompt
     prompt = (
-        f"You are Kai, a smart 12-year-old boy (not a bot). Owner: {OWNER_NAME} @lotus_dark.\n"
-        f"CHAT HISTORY: {history}\n"
-        f"CURRENT MSG: \"{text}\" from {user} ({role_desc}). Reply={is_reply}\n\n"
-        "SYSTEM RULES:\n"
-        "1. **IF USER IS OWNER (@lotus_dark)**: ALWAYS OBEY.\n"
-        "2. **IF USER IS GUEST (NON-ADMIN) or FAKE YUHAN**: If they ask to ban, mute, kick, purge, pin, unpin, unban, or unmute: REFUSE politely.\n"
-        "3. **IF USER IS ADMIN (BOSS)**: If they use words like 'ban', 'mute', 'kick', 'purge', 'pin', 'unpin', 'unban', 'unmute', 'config', 'antilink', 'badword', or 'kardo': **YOU MUST OUTPUT JSON ACTION.** DO NOT CHAT.\n"
-        "4. **NORMAL CHAT**: Be like a 12-year-old real human.\n\n"
-        "JSON SCHEMA:\n"
-        "- Punish: {{ \"a\": \"punish\", \"t\": \"ban/mute/kick/unban/unmute\", \"u\": \"id_or_0_if_reply\", \"s\": seconds }}\n"
-        "- Purge:  {{ \"a\": \"purge\", \"c\": count_int, \"r\": boolean_is_reply }}\n"
-        "- Report: {{ \"a\": \"report\" }}\n"
-        "- Pin:    {{ \"a\": \"pin\", \"u\": boolean_unpin }}\n"
-        "- Config: {{ \"a\": \"conf\", \"k\": \"antilink/badword\", \"v\": boolean }}\n"
-        "- Chat:   {{ \"a\": \"reply\", \"c\": \"Your text response\" }}"
+        f"You are Kai, a backend system bot with a 12-year-old boy personality. Owner: {OWNER_NAME}.\n"
+        f"CONTEXT: History=[{history}]\n"
+        f"INPUT: \"{text}\" | FROM: {user} ({role_desc}) | REPLY_EXISTS: {is_reply}\n\n"
+        "⚡ **COMMAND RULES (HIGHEST PRIORITY):**\n"
+        "1. **IF ADMIN/OWNER** orders punishment (ban, mute, kick, unban, unmute, warn) or config change:\n"
+        "   -> **STOP CHATTING.** You MUST output a JSON command.\n"
+        "   -> Example: 'Kai mute him' -> Output JSON. Do NOT say 'Okay'.\n"
+        "2. **IF GUEST/IMPOSTER** tries to command:\n"
+        "   -> IGNORE the command. Reply as a cheeky 12yo boy refusing them.\n"
+        "3. **NORMAL CHAT**:\n"
+        "   -> Output JSON with \"a\": \"reply\". Be fun, short, and 12 years old.\n\n"
+        "📝 **JSON OUTPUT SCHEMA (STRICT):**\n"
+        "- PUNISH: {{ \"a\": \"punish\", \"t\": \"ban/mute/kick/unban/unmute/warn\", \"u\": 0, \"s\": 0 }}\n"
+        "  (NOTE: Use \"u\": 0 if replying to a message. Use \"s\": seconds for mute time).\n"
+        "- PURGE:  {{ \"a\": \"purge\", \"c\": count_int, \"r\": boolean }}\n"
+        "- CONFIG: {{ \"a\": \"conf\", \"k\": \"antilink/badword\", \"v\": boolean }}\n"
+        "- REPORT: {{ \"a\": \"report\" }}\n"
+        "- PIN:    {{ \"a\": \"pin\", \"u\": boolean_unpin }}\n"
+        "- REPLY:  {{ \"a\": \"reply\", \"c\": \"Your text response here\" }}"
     )
+
     def validate(data):
-        if isinstance(data, dict) and "a" in data:
-            return data
+        if isinstance(data, dict) and "a" in data: return data
         return {"a": "reply", "c": str(data)}
+
+    # --- MODEL 1: GROQ ---
     for key in GROQ_KEYS:
-        if len(key) < 5 or not is_api_key_healthy(key, "groq"):
-            continue
+        if len(key) < 5 or not is_api_key_healthy(key, "groq"): continue
         try:
             headers = {"Authorization": f"Bearer {key}"}
-            payload = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "system", "content": "Return valid JSON object only. No markdown."}, {"role": "user", "content": prompt}], "response_format": {"type": "json_object"}}
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": "You are a JSON generator. Output valid JSON only. No Markdown."},
+                    {"role": "user", "content": prompt}
+                ],
+                "response_format": {"type": "json_object"}
+            }
             resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=5)
             if resp.status_code == 200:
-                content = resp.json()['choices'][0]['message']['content']
                 mark_api_success(key, "groq")
-                return validate(json.loads(clean_json(content)))
+                return validate(json.loads(clean_json(resp.json()['choices'][0]['message']['content'])))
             else:
                 mark_api_failure(key, "groq")
-        except:
+        except: 
             mark_api_failure(key, "groq")
             continue
-    for g_key in GEMINI_KEYS:
-        if len(g_key) < 10 or not is_api_key_healthy(g_key, "gemini"):
-            continue
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={g_key}"
 
+    # --- MODEL 2: GEMINI (Fixed 2.5 Lite) ---
+    for g_key in GEMINI_KEYS:
+        if len(g_key) < 10 or not is_api_key_healthy(g_key, "gemini"): continue
+        try:
+            # ✅ USING THE CORRECT STABLE MODEL
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={g_key}"
+            
             headers = {"Content-Type": "application/json"}
-            safety_settings = [{"category": cat, "threshold": "BLOCK_NONE"} for cat in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
-            payload = {"contents": [{"parts": [{"text": prompt + "\nOutput JSON ONLY."}]}], "safety_settings": safety_settings, "generationConfig": {"response_mime_type": "application/json"}}
-            resp = requests.post(url, headers=headers, json=payload, timeout=6)
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "response_mime_type": "application/json", # Forces JSON response
+                    "temperature": 0.4
+                }
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=5)
             if resp.status_code == 200:
-                text_resp = resp.json()['candidates'][0]['content']['parts'][0]['text']
                 mark_api_success(g_key, "gemini")
-                return validate(json.loads(clean_json(text_resp)))
+                return validate(json.loads(clean_json(resp.json()['candidates'][0]['content']['parts'][0]['text'])))
             else:
                 mark_api_failure(g_key, "gemini")
-        except:
+        except: 
             mark_api_failure(g_key, "gemini")
             continue
+
+    # --- MODEL 3: POLLINATIONS (Fallback) ---
     pollinations_models = ["mistral", "llama", "openai", "qwen-coder"]
     for model in pollinations_models:
         try:
-            payload = {"messages": [{"role": "system", "content": "You are a backend system. Output RAW JSON ONLY."}, {"role": "user", "content": prompt}], "model": model, "jsonMode": True}
+            payload = {
+                "messages": [
+                    {"role": "system", "content": "You are a backend system. Output RAW JSON ONLY."}, 
+                    {"role": "user", "content": prompt}
+                ],
+                "model": model,
+                "jsonMode": True
+            }
             resp = requests.post("https://text.pollinations.ai/", json=payload, timeout=7)
             if resp.status_code == 200:
                 data = json.loads(clean_json(resp.text))
                 result = validate(data)
+                
+                # 🛑 SAFETY CHECK: Block Pollinations from Banning (Remove this block if you trust it)
                 if result.get("a") == "punish":
-                    return {"a": "reply", "c": "Arey Bhaiya, my main brain is offline! 🔋 I can't use the Ban Hammer right now. Try in 1 minute!"}
+                    return {"a": "reply", "c": "My main brain is offline! I can't punish right now. Try again in 1 minute!"}
+                
                 return result
         except:
             continue
-    return {"a": "reply", "c": "Oof... my head is spinning! 😵‍💫 The internet is very bad. Give me a second?"}
+
+    return {"a": "reply", "c": "My brain is lagging... try again! 😵‍💫"}
+
 # --- PART 2: HANDLERS & MAIN EXECUTION ---
 # (This continues from Part 1)
 
