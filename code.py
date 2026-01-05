@@ -13,7 +13,6 @@ import pymongo
 import certifi
 
 
-# --- CONFIGURATION ---
 TOKEN = os.getenv("TELEGRAM_TOKEN").strip() 
 keys_env = os.getenv("GROQ_KEYS", "").strip()
 GROQ_KEYS = keys_env.split(",") if keys_env else []
