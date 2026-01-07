@@ -525,7 +525,7 @@ def get_ai_decision(user, text, history, is_reply, is_user_admin, is_user_owner)
 
     "CRITICAL FINAL RULE:\n"
     "Your output must be a SINGLE LINE of Valid JSON. Do not write 'Here is the json'. Just the JSON."
-)
+    )
 
 
     def validate(data):
