@@ -459,15 +459,43 @@ def cmd_filter(m):
 @bot.message_handler(commands=['report'])
 def cmd_report(m):
     if m.chat.type != 'private': Executor.report(m)
+def check_cas(user_id):
+    try:
+        resp = requests.get(f"https://api.cas.chat/check?user_id={user_id}", timeout=3)
+        data = resp.json()
+        return data.get("ok", False)  # True = spammer
+    except:
+        return False  # On error, give benefit of doubt
+
 @bot.message_handler(content_types=['new_chat_members'])
 def on_join(m):
     if m.chat.type == 'private': return
     for user in m.new_chat_members:
         if user.id == bot.get_me().id: continue
+        
+        # --- CAS CHECK FIRST ---
+        if check_cas(user.id):
+            try:
+                bot.ban_chat_member(m.chat.id, user.id)
+                safe_name = safe_text(user.first_name)
+                bot.send_message(
+                    m.chat.id,
+                    f"🚫 *CAS Banned user* [{safe_name}](tg://user?id={user.id}) *was auto\\-removed\\!*\n"
+                    f"_This user is a known spammer \\(Combot Anti\\-Spam\\)_",
+                    parse_mode="MarkdownV2"
+                )
+            except: pass
+            continue  # Skip welcome for this user
+        
+        # --- WELCOME (only if not spammer) ---
         try:
             safe_name = safe_text(user.first_name)
             safe_title = safe_text(m.chat.title)
-            txt = f"Welcome [{safe_name}](tg://user?id={user.id})\\! 👋\nYou’re now a part of *{safe_title}*\\.\nWe’re glad to have you here\\. Please be respectful and courteous to all members\\."
+            txt = (
+                f"Welcome [{safe_name}](tg://user?id={user.id})\\! 👋\n"
+                f"You're now a part of *{safe_title}*\\.\n"
+                f"We're glad to have you here\\. Please be respectful and courteous to all members\\."
+            )
             bot.send_message(m.chat.id, txt, parse_mode="MarkdownV2")
         except: pass
             
