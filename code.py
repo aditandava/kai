@@ -467,11 +467,7 @@ def check_cas(user_id):
     except:
         return False  # On error, give benefit of doubt
 
-def safe_text(text):
-    if not text:
-        return "User"
-    escape_chars = r'\_*[]()~`>#+-=|{}.!'
-    return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
+
 
 @bot.message_handler(content_types=['new_chat_members'])
 def on_join(m):
