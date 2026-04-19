@@ -90,9 +90,20 @@ class Database:
 # Initialize
 db = Database()
 
+# NEW - REPLACE WITH THIS:
 def safe_text(text):
-    if not text: return ""
-    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", str(text))
+    if not text:
+        return "User"
+    escape_chars = r'\_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
+
+def check_cas(user_id):
+    try:
+        resp = requests.get(f"https://api.cas.chat/check?user_id={user_id}", timeout=3)
+        data = resp.json()
+        return data.get("ok", False)
+    except:
+        return False
 
 def clean_json(text):
     try:
@@ -459,13 +470,6 @@ def cmd_filter(m):
 @bot.message_handler(commands=['report'])
 def cmd_report(m):
     if m.chat.type != 'private': Executor.report(m)
-def check_cas(user_id):
-    try:
-        resp = requests.get(f"https://api.cas.chat/check?user_id={user_id}", timeout=3)
-        data = resp.json()
-        return data.get("ok", False)  # True = spammer
-    except:
-        return False  # On error, give benefit of doubt
 
 
 
