@@ -467,6 +467,12 @@ def check_cas(user_id):
     except:
         return False  # On error, give benefit of doubt
 
+def safe_text(text):
+    if not text:
+        return "User"
+    escape_chars = r'\_*[]()~`>#+-=|{}.!'
+    return ''.join(f'\\{c}' if c in escape_chars else c for c in str(text))
+
 @bot.message_handler(content_types=['new_chat_members'])
 def on_join(m):
     if m.chat.type == 'private': return
@@ -478,10 +484,11 @@ def on_join(m):
             try:
                 bot.ban_chat_member(m.chat.id, user.id)
                 safe_name = safe_text(user.first_name)
+                cas_url = f"https://cas.chat/query?u={user.id}"
                 bot.send_message(
                     m.chat.id,
-                    f"🚫 *CAS Banned user* [{safe_name}](tg://user?id={user.id}) *was auto\\-removed\\!*\n"
-                    f"_This user is a known spammer \\(Combot Anti\\-Spam\\)_",
+                    f"🚫 *CAS Banned\\!* [{safe_name}]({cas_url}) was auto\\-removed\\.\n"
+                    f"_This user is flagged by Combot Anti\\-Spam\\._",
                     parse_mode="MarkdownV2"
                 )
             except: pass
